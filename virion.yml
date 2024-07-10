@@ -1,0 +1,10 @@
+---
+name: VapmDatabase
+version: 2.0
+api: [4.0.0, 5.0.0]
+php:
+  - 8.1
+  - 8.2
+antigen: venndev\vapmdatabase
+author: VennDev
+...
