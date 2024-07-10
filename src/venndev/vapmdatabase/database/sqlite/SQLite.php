@@ -10,7 +10,9 @@ use Throwable;
 use venndev\vapmdatabase\database\Database;
 use venndev\vapmdatabase\database\ResultQuery;
 use venndev\vapmdatabase\utils\QueryUtil;
+use vennv\vapm\FiberManager;
 use vennv\vapm\Promise;
+use const SQLITE3_ASSOC;
 use const SQLITE3_OPEN_CREATE;
 use const SQLITE3_OPEN_READWRITE;
 
@@ -18,6 +20,8 @@ final class SQLite extends Database
 {
 
     private SQLite3 $sqlite;
+
+    private bool $isBusy = false;
 
     public function __construct(
         private readonly string $databasePath
@@ -56,10 +60,23 @@ final class SQLite extends Database
     {
         $query = QueryUtil::buildQueryByNamedArgs($query, $namedArgs);
         return new Promise(function (callable $resolve, callable $reject) use ($query) {
+            while ($this->isBusy) FiberManager::wait();
+
+            $this->isBusy = true; // Set busy flag
+
             $result = $this->sqlite->query($query);
+
+            $this->isBusy = false; // Reset busy flag
+
             if ($result === false) {
                 $reject(new Exception($this->sqlite->lastErrorMsg()));
             } else {
+                try {
+                    $result = $result->fetchArray(SQLITE3_ASSOC);
+                } catch (Throwable $e) {
+                    $reject($e);
+                }
+
                 $resolve(new ResultQuery(
                     status: ResultQuery::SUCCESS,
                     reason: '',
