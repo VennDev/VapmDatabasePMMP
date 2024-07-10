@@ -1,0 +1,10 @@
+--- # Poggit-CI Manifest. Open the CI at https://poggit.pmmp.io/ci/VennDev/VapmDatabasePMMP
+build-by-default: true
+branches:
+- main
+projects:
+  VapmDatabasePMMP:
+    path: ""
+    model: virion
+    type: library
+...
