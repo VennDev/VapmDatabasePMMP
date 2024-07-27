@@ -109,24 +109,33 @@ final class MySQL extends Database
             $begin = microtime(true);
             $numQueries = 0;
 
-            while (microtime(true) - $begin <= $this->queryTimeout) {
-                $numQueries = (int)mysqli_poll($poll, $errors, $rejects, 0, $this->queryTimeout);
-                if ($numQueries > 0) break;
-                FiberManager::wait();
-            }
+//            while (microtime(true) - $begin <= $this->queryTimeout) {
+//                $numQueries = (int)mysqli_poll($poll, $errors, $rejects, 0, $this->queryTimeout);
+//                if ($numQueries > 0) break;
+//                FiberManager::wait();
+//            }
 
-            $this->isBusy = false; // Reset busy flag
+//            if ($numQueries === 0) {
+//                $reject(new ResultQuery(ResultQuery::FAILED, "Query error!", $errors, $rejects, null));
+//            } else {
+//                $result = $this->mysqli->reap_async_query();
+//                $result === false ? $reject(new ResultQuery(ResultQuery::FAILED, $this->mysqli->error, $errors, $rejects, null)) : $resolve(new ResultQuery(ResultQuery::SUCCESS, '', $errors, $rejects, is_bool($result) ? $result : iterator_to_array($result->getIterator())));
+//            }
 
-            if ($numQueries === 0) {
-                $reject(new ResultQuery(ResultQuery::FAILED, "Query error!", $errors, $rejects, null));
-            } else {
+            try {
                 $result = $this->mysqli->reap_async_query();
                 $result === false ? $reject(new ResultQuery(ResultQuery::FAILED, $this->mysqli->error, $errors, $rejects, null)) : $resolve(new ResultQuery(ResultQuery::SUCCESS, '', $errors, $rejects, is_bool($result) ? $result : iterator_to_array($result->getIterator())));
+            } catch (Throwable $e) {
+                $reject(new ResultQuery(ResultQuery::FAILED, "Query error!", $errors, $rejects, null));
             }
 
             $this->mysqli->next_result();
             $this->mysqli->close();
             $this->mysqli = null;
+
+            $this->isBusy = false; // Reset busy flag
+
+            var_dump("AAA");
         });
     }
 
