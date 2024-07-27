@@ -21,7 +21,7 @@ use const MYSQLI_STORE_RESULT;
 final class MySQL extends Database
 {
 
-    private mysqli $mysqli;
+    private ?mysqli $mysqli;
 
     private bool $isBusy = false;
 
@@ -64,7 +64,7 @@ final class MySQL extends Database
         return $this->port;
     }
 
-    public function getDatabase(): mysqli
+    public function getDatabase(): ?mysqli
     {
         return $this->mysqli;
     }
@@ -84,6 +84,11 @@ final class MySQL extends Database
         $this->queryTimeout = $queryTimeout;
     }
 
+    public function reconnect(): void
+    {
+        $this->mysqli = new mysqli($this->host, $this->username, $this->password, $this->databaseName, $this->port);
+    }
+
     /**
      * @throws Throwable
      */
@@ -91,6 +96,7 @@ final class MySQL extends Database
     {
         if (count($namedArgs) > 0) $query = QueryUtil::buildQueryByNamedArgs($query, $namedArgs);
         return new Promise(function ($resolve, $reject) use ($query): void {
+            if ($this->mysqli === null) $this->reconnect();
             while ($this->isBusy) FiberManager::wait();
 
             $this->isBusy = true; // Set busy flag
@@ -119,6 +125,8 @@ final class MySQL extends Database
             }
 
             $this->mysqli->next_result();
+            $this->mysqli->close();
+            $this->mysqli = null;
         });
     }
 

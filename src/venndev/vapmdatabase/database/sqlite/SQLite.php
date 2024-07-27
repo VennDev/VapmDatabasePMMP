@@ -50,6 +50,11 @@ final class SQLite extends Database
         return $this->sqlite;
     }
 
+    public function reconnect(): void
+    {
+        // Do nothing
+    }
+
     /**
      * @param string $query
      * @param array $namedArgs
