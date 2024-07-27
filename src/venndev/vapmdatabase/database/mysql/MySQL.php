@@ -134,8 +134,6 @@ final class MySQL extends Database
             $this->mysqli = null;
 
             $this->isBusy = false; // Reset busy flag
-
-            var_dump("AAA");
         });
     }
 
