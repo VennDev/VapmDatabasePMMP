@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace venndev\vapmdatabase\database\mysql;
 
+use Exception;
 use mysqli;
 use Throwable;
 use venndev\vapmdatabase\database\Database;
@@ -94,46 +95,60 @@ final class MySQL extends Database
      */
     public function execute(string $query, array $namedArgs = []): Promise
     {
-        if (count($namedArgs) > 0) $query = QueryUtil::buildQueryByNamedArgs($query, $namedArgs);
+        if (count($namedArgs) > 0) {
+            $query = QueryUtil::buildQueryByNamedArgs($query, $namedArgs);
+        }
+
         return new Promise(function ($resolve, $reject) use ($query): void {
-            if ($this->mysqli === null) $this->reconnect();
-            while ($this->isBusy) FiberManager::wait();
-
-            $this->isBusy = true; // Set busy flag
-
-            $this->mysqli->query($query, MYSQLI_STORE_RESULT | MYSQLI_ASYNC);
-
-            $poll = [$this->mysqli];
-            $errors = [];
-            $rejects = [];
-            $begin = microtime(true);
-            $numQueries = 0;
-
-//            while (microtime(true) - $begin <= $this->queryTimeout) {
-//                $numQueries = (int)mysqli_poll($poll, $errors, $rejects, 0, $this->queryTimeout);
-//                if ($numQueries > 0) break;
-//                FiberManager::wait();
-//            }
-
-//            if ($numQueries === 0) {
-//                $reject(new ResultQuery(ResultQuery::FAILED, "Query error!", $errors, $rejects, null));
-//            } else {
-//                $result = $this->mysqli->reap_async_query();
-//                $result === false ? $reject(new ResultQuery(ResultQuery::FAILED, $this->mysqli->error, $errors, $rejects, null)) : $resolve(new ResultQuery(ResultQuery::SUCCESS, '', $errors, $rejects, is_bool($result) ? $result : iterator_to_array($result->getIterator())));
-//            }
-
             try {
+                if ($this->mysqli === null) {
+                    $this->reconnect();
+                }
+
+                while ($this->isBusy) {
+                    FiberManager::wait();
+                }
+
+                $this->isBusy = true; // Set busy flag
+
+                if (!$this->mysqli->query($query, MYSQLI_ASYNC)) {
+                    throw new Exception($this->mysqli->error);
+                }
+
+                $poll = [$this->mysqli];
+                $errors = [];
+                $rejects = [];
+                $begin = microtime(true);
+                $numQueries = 0;
+
+                while (microtime(true) - $begin <= $this->queryTimeout) {
+                    $numQueries = (int)mysqli_poll($poll, $errors, $rejects, $this->queryTimeout); // Convert to milliseconds
+                    if ($numQueries > 0) break;
+                    FiberManager::wait();
+                }
+
+                if ($numQueries === 0) {
+                    throw new Exception("Query timeout!");
+                }
+
                 $result = $this->mysqli->reap_async_query();
-                $result === false ? $reject(new ResultQuery(ResultQuery::FAILED, $this->mysqli->error, $errors, $rejects, null)) : $resolve(new ResultQuery(ResultQuery::SUCCESS, '', $errors, $rejects, is_bool($result) ? $result : iterator_to_array($result->getIterator())));
+                if ($result === false) {
+                    throw new Exception($this->mysqli->error);
+                }
+
+                $resolve(new ResultQuery(
+                    ResultQuery::SUCCESS,
+                    '',
+                    $errors,
+                    $rejects,
+                    is_bool($result) ? $result : iterator_to_array($result->getIterator())
+                ));
             } catch (Throwable $e) {
-                $reject(new ResultQuery(ResultQuery::FAILED, "Query error!", $errors, $rejects, null));
+                $reject(new ResultQuery(ResultQuery::FAILED, $e->getMessage(), $errors, $rejects, null));
+            } finally {
+                $this->isBusy = false; // Reset busy flag
+                $this->mysqli->next_result();
             }
-
-            $this->mysqli->next_result();
-            $this->mysqli->close();
-            $this->mysqli = null;
-
-            $this->isBusy = false; // Reset busy flag
         });
     }
 
