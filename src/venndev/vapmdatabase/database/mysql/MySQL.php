@@ -8,6 +8,7 @@ use Exception;
 use mysqli;
 use Throwable;
 use venndev\vapmdatabase\database\Database;
+use venndev\vapmdatabase\database\handler\CachingQueryHandler;
 use venndev\vapmdatabase\database\ResultQuery;
 use venndev\vapmdatabase\utils\QueryUtil;
 use vennv\vapm\FiberManager;
@@ -101,6 +102,10 @@ final class MySQL extends Database
 
         return new Promise(function ($resolve, $reject) use ($query): void {
             try {
+                if (($cached = CachingQueryHandler::getResultFromCache($query)) !== null) {
+                    $resolve($cached);
+                }
+
                 if ($this->mysqli === null) {
                     $this->reconnect();
                 }
@@ -144,6 +149,7 @@ final class MySQL extends Database
                     is_bool($result) ? $result : iterator_to_array($result->getIterator())
                 ));
             } catch (Throwable $e) {
+                echo "Error: " . $e->getMessage() . PHP_EOL . $e->getTraceAsString() . PHP_EOL;
                 $reject(new ResultQuery(ResultQuery::FAILED, $e->getMessage(), $errors, $rejects, null));
             } finally {
                 $this->isBusy = false; // Reset busy flag

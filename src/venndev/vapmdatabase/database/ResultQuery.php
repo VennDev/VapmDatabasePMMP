@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace venndev\vapmdatabase\database;
 
+use venndev\vapmdatabase\database\utils\Settings;
+
 final class ResultQuery
 {
 
@@ -21,6 +23,8 @@ final class ResultQuery
 
     private mixed $result;
 
+    private float $timeResponse;
+
     public function __construct(string $status, string $reason, array $errors, array $rejects, mixed $result)
     {
         $this->status = $status;
@@ -28,6 +32,7 @@ final class ResultQuery
         $this->errors = $errors;
         $this->rejects = $rejects;
         $this->result = $result;
+        $this->timeResponse = microtime(true);
     }
 
     public function getStatus(): string
@@ -55,6 +60,21 @@ final class ResultQuery
         return $this->result;
     }
 
+    public function getTimeResponse(): float
+    {
+        return $this->timeResponse;
+    }
+
+    public function getTimeRemaining(): float
+    {
+        return microtime(true) - $this->timeResponse;
+    }
+
+    public function isExpired(): bool
+    {
+        return $this->getTimeRemaining() > Settings::TIME_EXPIRE_CACHE;
+    }
+
     public function toJson(): string
     {
         return json_encode([
@@ -62,7 +82,8 @@ final class ResultQuery
             "reason" => $this->reason,
             "errors" => $this->errors,
             "rejects" => $this->rejects,
-            "result" => $this->result
+            "result" => $this->result,
+            "timeResponse" => $this->timeResponse
         ]);
     }
 

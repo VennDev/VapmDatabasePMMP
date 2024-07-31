@@ -8,6 +8,7 @@ use Exception;
 use SQLite3;
 use Throwable;
 use venndev\vapmdatabase\database\Database;
+use venndev\vapmdatabase\database\handler\CachingQueryHandler;
 use venndev\vapmdatabase\database\ResultQuery;
 use venndev\vapmdatabase\utils\QueryUtil;
 use vennv\vapm\FiberManager;
@@ -65,6 +66,10 @@ final class SQLite extends Database
     {
         $query = QueryUtil::buildQueryByNamedArgs($query, $namedArgs);
         return new Promise(function (callable $resolve, callable $reject) use ($query) {
+            if (($cached = CachingQueryHandler::getResultFromCache($query)) !== null) {
+                $resolve($cached);
+            }
+
             while ($this->isBusy) FiberManager::wait();
 
             $this->isBusy = true; // Set busy flag
@@ -79,6 +84,7 @@ final class SQLite extends Database
                 try {
                     $result = $result->fetchArray(SQLITE3_ASSOC);
                 } catch (Throwable $e) {
+                    echo "Error: " . $e->getMessage() . PHP_EOL . $e->getTraceAsString() . PHP_EOL;
                     $reject($e);
                 }
 
