@@ -13,4 +13,6 @@ abstract class Database
 
     abstract public function execute(string $query, array $namedArgs = []): mixed;
 
+    abstract public function executeSync(string $query, array $namedArgs = []): mixed;
+
 }

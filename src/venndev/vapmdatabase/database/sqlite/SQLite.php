@@ -84,7 +84,6 @@ final class SQLite extends Database
                 try {
                     $result = $result->fetchArray(SQLITE3_ASSOC);
                 } catch (Throwable $e) {
-                    echo "Error: " . $e->getMessage() . PHP_EOL . $e->getTraceAsString() . PHP_EOL;
                     $reject($e);
                 }
 
@@ -97,6 +96,37 @@ final class SQLite extends Database
                 ));
             }
         });
+    }
+
+    /**
+     * @param string $query
+     * @param array $namedArgs
+     * @return ResultQuery|Exception|null
+     */
+    public function executeSync(string $query, array $namedArgs = []): null|ResultQuery|Exception
+    {
+        $query = QueryUtil::buildQueryByNamedArgs($query, $namedArgs);
+        if (($cached = CachingQueryHandler::getResultFromCache($query)) !== null) return $cached;
+
+        $result = $this->sqlite->query($query);
+
+        if ($result === false) {
+            return new Exception($this->sqlite->lastErrorMsg());
+        } else {
+            try {
+                $result = $result->fetchArray(SQLITE3_ASSOC);
+            } catch (Throwable $e) {
+                $reject($e);
+            }
+
+            return new ResultQuery(
+                status: ResultQuery::SUCCESS,
+                reason: '',
+                errors: [],
+                rejects: [],
+                result: $result
+            );
+        }
     }
 
 }

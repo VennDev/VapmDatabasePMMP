@@ -101,6 +101,8 @@ final class MySQL extends Database
         }
 
         return new Promise(function ($resolve, $reject) use ($query): void {
+            $errors = [];
+            $rejects = [];
             try {
                 if (($cached = CachingQueryHandler::getResultFromCache($query)) !== null) {
                     $resolve($cached);
@@ -121,8 +123,6 @@ final class MySQL extends Database
                 }
 
                 $poll = [$this->mysqli];
-                $errors = [];
-                $rejects = [];
                 $begin = microtime(true);
                 $numQueries = 0;
 
@@ -146,16 +146,56 @@ final class MySQL extends Database
                     '',
                     $errors,
                     $rejects,
-                    is_bool($result) ? $result : iterator_to_array($result->getIterator())
+                    is_bool($result) ? true : iterator_to_array($result->getIterator())
                 ));
             } catch (Throwable $e) {
-                echo "Error: " . $e->getMessage() . PHP_EOL . $e->getTraceAsString() . PHP_EOL;
                 $reject(new ResultQuery(ResultQuery::FAILED, $e->getMessage(), $errors, $rejects, null));
             } finally {
                 $this->isBusy = false; // Reset busy flag
                 $this->mysqli->next_result();
             }
         });
+    }
+
+    /**
+     * @throws Throwable
+     */
+    public function executeSync(string $query, array $namedArgs = []): null|ResultQuery|Exception
+    {
+        if (count($namedArgs) > 0) $query = QueryUtil::buildQueryByNamedArgs($query, $namedArgs);
+        $errors = [];
+        $rejects = [];
+        try {
+            if (($cached = CachingQueryHandler::getResultFromCache($query)) !== null) return $cached;
+            if ($this->mysqli === null) $this->reconnect();
+            if (!$this->mysqli->query($query, MYSQLI_ASYNC)) throw new Exception($this->mysqli->error);
+
+            $poll = [$this->mysqli];
+            $begin = microtime(true);
+            $numQueries = 0;
+
+            while (microtime(true) - $begin <= $this->queryTimeout) {
+                $numQueries = (int)mysqli_poll($poll, $errors, $rejects, $this->queryTimeout); // Convert to milliseconds
+                if ($numQueries > 0) break;
+            }
+
+            if ($numQueries === 0) throw new Exception("Query timeout!");
+            $result = $this->mysqli->reap_async_query();
+            if ($result === false) throw new Exception($this->mysqli->error);
+
+            return new ResultQuery(
+                ResultQuery::SUCCESS,
+                '',
+                $errors,
+                $rejects,
+                is_bool($result) ? true : iterator_to_array($result->getIterator())
+            );
+        } catch (Throwable $e) {
+            return new ResultQuery(ResultQuery::FAILED, $e->getMessage(), $errors, $rejects, null);
+        } finally {
+            $this->isBusy = false; // Reset busy flag
+            $this->mysqli->next_result();
+        }
     }
 
     public function close(): void
